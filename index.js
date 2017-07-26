@@ -2,24 +2,24 @@ var verbose = false
 
 var util = require('util'),
     _ = require('underscore'),
-    request	= require('request'),
     crypto = require('crypto'),
     VError = require('verror'),
-    md5 = require('MD5')
+    md5 = require('MD5'),
+    https = require("https")
 
 var Yobit = function Yobit(api_key, secret, server, timeout)
 {
     this.api_key = api_key
     this.secret = secret
 
-    this.server = server || 'https://yobit.net'
+    this.server = server || 'yobit.net'
     this.publicApiPath = 'api/3'
     this.privateApiPath = 'tapi'
 
     this.timeout = timeout || 20000
 }
 
-var headers = {"User-Agent": "nodejs-7.5-api-client"}
+var headers = {"User-Agent": "nodejs-7.10-api-client"}
 
 Yobit.prototype.privateRequest = function(method, params, callback)
 {
@@ -54,6 +54,7 @@ Yobit.prototype.privateRequest = function(method, params, callback)
 
     var options = {
         url: this.server + '/' + this.privateApiPath,
+        path: "/" + this.privateApiPath,
         method: 'POST',
         headers: headers,
         form: params
@@ -145,6 +146,7 @@ Yobit.prototype.publicRequest = function(method, params, callback)
 
     var options = {
         url: url,
+        path: "/" + this.publicApiPath + '/' + method,
         method: 'GET',
         headers: headers,
         timeout: this.timeout,
@@ -162,49 +164,74 @@ function executeRequest(options, requestDesc, callback)
 {
     var functionName = 'Yobit.executeRequest()'
 
-    request(options, function(err, response, data)
-    {
-        var error = null,   // default to no errors
-            returnObject = data
+    var https_options = {
+        host: 'yobit.net',
+        path: options.path,
+        method: options.method
+    }
 
-        if(err)
-        {
-            error = new VError(err, '%s failed %s', functionName, requestDesc)
-            error.name = err.code
-        }
-        else if (response.statusCode < 200 || response.statusCode >= 300)
-        {
-            error = new VError('%s HTTP status code %s returned from %s', functionName,
-                response.statusCode, requestDesc)
-            error.name = response.statusCode
-        }
-        else if (options.form)
-        {
-            try {
-                returnObject = JSON.parse(data)
-            }
-            catch(e) {
-                error = new VError(e, 'Could not parse response from server: ' + data)
-            }
-        }
-        // if json request was not able to parse json response into an object
-        else if (options.json && !_.isObject(data) )
-        {
-            error = new VError('%s could not parse response from %s\nResponse: %s', functionName, requestDesc, data)
-        }
+    full_data = []
+    var req = https.request(https_options, (res) => {
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+            full_data.push(chunk)
+        }).on('end', () => {
+            body = full_data.join("")
+            callback(false, body)
+        });
+    });
 
-        if (_.has(returnObject, 'error_code'))
-        {
-            var errorMessage = mapErrorMessage(returnObject.error_code)
-
-            error = new VError('%s %s returned error code %s, message: "%s"', functionName,
-                requestDesc, returnObject.error_code, errorMessage)
-
-            error.name = returnObject.error_code
-        }
-
-        callback(error, returnObject)
+    req.on('error', (error) => {
+        error = new VError(err, '%s failed %s', functionName, requestDesc)
+        error.name = err.code
+        callback(error, [])
     })
+
+    req.end()
+
+    // request(options, function(err, response, data)
+    // {
+    //     var error = null,   // default to no errors
+    //         returnObject = data
+
+    //     if(err)
+    //     {
+    //         error = new VError(err, '%s failed %s', functionName, requestDesc)
+    //         error.name = err.code
+    //     }
+    //     else if (response.statusCode < 200 || response.statusCode >= 300)
+    //     {
+    //         error = new VError('%s HTTP status code %s returned from %s', functionName,
+    //             response.statusCode, requestDesc)
+    //         error.name = response.statusCode
+    //     }
+    //     else if (options.form)
+    //     {
+    //         try {
+    //             returnObject = JSON.parse(data)
+    //         }
+    //         catch(e) {
+    //             error = new VError(e, 'Could not parse response from server: ' + data)
+    //         }
+    //     }
+    //     // if json request was not able to parse json response into an object
+    //     else if (options.json && !_.isObject(data) )
+    //     {
+    //         error = new VError('%s could not parse response from %s\nResponse: %s', functionName, requestDesc, data)
+    //     }
+
+    //     if (_.has(returnObject, 'error_code'))
+    //     {
+    //         var errorMessage = mapErrorMessage(returnObject.error_code)
+
+    //         error = new VError('%s %s returned error code %s, message: "%s"', functionName,
+    //             requestDesc, returnObject.error_code, errorMessage)
+
+    //         error.name = returnObject.error_code
+    //     }
+
+    //     callback(error, returnObject)
+    // })
 }
 
 //
