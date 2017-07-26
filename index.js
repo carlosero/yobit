@@ -176,12 +176,20 @@ function executeRequest(options, requestDesc, callback)
         res.on('data', (chunk) => {
             full_data.push(chunk)
         }).on('end', () => {
-            body = full_data.join("")
-            callback(false, body)
+            body = full_data.join("").split("}{").join(",") // RETARDED FUCKING YOBIT DEVELOPERS I HATE YOU ALL
+            error = undefined
+            try{
+                body = JSON.parse(body)
+            } catch(err) {
+                error = err
+            }
+            
+            callback(error, body)
         });
     });
 
     req.on('error', (error) => {
+        console.log("error")
         error = new VError(err, '%s failed %s', functionName, requestDesc)
         error.name = err.code
         callback(error, [])
